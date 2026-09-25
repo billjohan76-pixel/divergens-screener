@@ -225,6 +225,8 @@ def fetch_and_analyze(ticker_yf, tf="Vecka", full=False):
                          progress=False, auto_adjust=True)
         if df is None or len(df) < 40:
             return None
+        if isinstance(df.columns, pd.MultiIndex):        # nyare yfinance: (Price, Ticker)
+            df.columns = df.columns.get_level_values(0)
         df = df.dropna()
         close  = df["Close"].squeeze()
         high   = df["High"].squeeze()
@@ -280,6 +282,8 @@ def fetch_benchmark(ticker, tf="Vecka"):
         cfg = TIMEFRAMES[tf]
         df = yf.download(ticker, period=cfg["period"], interval=cfg["interval"], progress=False, auto_adjust=True)
         if df is None or len(df) < 10: return None
+        if isinstance(df.columns, pd.MultiIndex):
+            df.columns = df.columns.get_level_values(0)
         return df["Close"].squeeze()
     except Exception:
         return None
@@ -1013,7 +1017,7 @@ with st.sidebar:
 
 # Läge: "search" visar bara det sökta bolaget, "screener" visar screenern
 if "mode" not in st.session_state:
-    st.session_state["mode"] = "screener"
+    st.session_state["mode"] = "start"
 if run_btn:
     st.session_state["mode"] = "screener"
     st.session_state.pop("shown_ticker", None)
@@ -1065,8 +1069,8 @@ if search_input.strip() and len(search_input.strip()) >= 2:
                                          benchmark_close=bench if show_rs else None,
                                          height=chart_height)
                 components.html(html, height=chart_height + 240, scrolling=False)
-                if st.button("✖  Stäng diagram och visa screenern", key="close_search"):
-                    st.session_state["mode"] = "screener"
+                if st.button("✖  Stäng diagram", key="close_search"):
+                    st.session_state["mode"] = "start"
                     st.session_state.pop("shown_ticker", None)
                     st.rerun()
     elif search_btn:
@@ -1075,7 +1079,9 @@ if search_input.strip() and len(search_input.strip()) >= 2:
 st.markdown("---")
 
 # I sökläge visas bara det sökta bolaget – inga andra grafer
-if st.session_state.get("mode") == "search":
+if st.session_state.get("mode") != "screener":
+    if st.session_state.get("mode") == "start":
+        st.info("Sök upp ett bolag ovan, eller klicka **Kör screener** i menyn till vänster för att skanna en hel lista.")
     st.stop()
 
 # ── Divergensanalys / Screener ────────────────────────────
