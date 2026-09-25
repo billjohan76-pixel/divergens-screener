@@ -893,19 +893,47 @@ showFrom({default_from});
     return html
 
 
+# Tyska regionalbörser listar nästan alla stora bolag en gång till – de döljs
+# när bolaget har en huvudnotering på annat håll.
+SECONDARY_EXCHANGES = {"MUN", "FRA", "DUS", "STU", "BER", "HAM", "HAN", "EBS", "VIE", "IOB", "MEX", "BUE"}
+EXCHANGE_NAMES = {
+    "STO": "Stockholm", "HEL": "Helsingfors", "CPH": "Köpenhamn", "OSL": "Oslo",
+    "NMS": "Nasdaq", "NGM": "Nasdaq", "NCM": "Nasdaq", "NYQ": "NYSE", "ASE": "NYSE American",
+    "PCX": "NYSE Arca", "BTS": "Cboe", "LSE": "London", "GER": "Xetra", "PAR": "Paris",
+    "AMS": "Amsterdam", "MIL": "Milano", "MCE": "Madrid", "TOR": "Toronto", "CCC": "Krypto",
+    "CCY": "Valuta", "NGS": "Nordic Growth Market", "SPT": "Spotlight",
+}
+
+def _name_key(namn):
+    k = namn.lower()
+    for w in ["(publ)", " publ", " ab", " asa", " oyj", " a/s", " inc.", " inc", " plc", " corp.", ",", "."]:
+        k = k.replace(w, "")
+    return " ".join(k.split())
+
 def search_tickers(query):
     try:
-        url = f"https://query2.finance.yahoo.com/v1/finance/search?q={query}&lang=sv-SE&region=SE&quotesCount=8&newsCount=0"
+        url = f"https://query2.finance.yahoo.com/v1/finance/search?q={query}&lang=sv-SE&region=SE&quotesCount=15&newsCount=0"
         resp = req.get(url, headers={"User-Agent": "Mozilla/5.0"}, timeout=5)
-        results = []
+        raw = []
         for q in resp.json().get("quotes", []):
-            if q.get("quoteType") in ("EQUITY", "ETF", "MUTUALFUND", "CRYPTOCURRENCY", "CURRENCY", "FUTURE"):
-                results.append({
+            if q.get("quoteType") in ("EQUITY", "ETF", "MUTUALFUND", "CRYPTOCURRENCY", "CURRENCY", "FUTURE", "INDEX"):
+                raw.append({
                     "namn":   q.get("longname") or q.get("shortname", ""),
                     "ticker": q.get("symbol", ""),
-                    "börs":   q.get("exchange", ""),
+                    "kod":    q.get("exchange", ""),
                 })
-        return results
+        # Ett förslag per bolag: huvudnoteringen före tyska regionalbörser
+        best = {}
+        for r in raw:
+            key = _name_key(r["namn"]) or r["ticker"]
+            secondary = r["kod"] in SECONDARY_EXCHANGES
+            if key not in best or (best[key]["_sec"] and not secondary):
+                best[key] = {**r, "_sec": secondary}
+        results = []
+        for r in best.values():
+            results.append({"namn": r["namn"], "ticker": r["ticker"],
+                            "börs": EXCHANGE_NAMES.get(r["kod"], r["kod"])})
+        return results[:6]
     except Exception:
         return []
 
